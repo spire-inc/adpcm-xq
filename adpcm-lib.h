@@ -18,7 +18,7 @@ struct adpcm_context {
 };
 
 void adpcm_init_context (struct adpcm_context *pcnxt, int lookahead, int32_t initial_delta);
-int adpcm_encode_block (struct adpcm_context *pcnxt, uint8_t *outbuf, size_t *outbufsize, const int16_t *inbuf, int inbufcount);
-int adpcm_decode_block (int16_t *outbuf, const uint8_t *inbuf, size_t inbufsize);
+void adpcm_encode (struct adpcm_context *pcnxt, uint8_t *outbuf, size_t *outbufsize, const int16_t *inbuf, int inbufcount);
+void adpcm_decode (struct adpcm_context *pcnxt, int16_t *outbuf, size_t *outbufsize, const uint8_t *inbuf, int inbufcount);
 
 #endif /* ADPCMLIB_H_ */
