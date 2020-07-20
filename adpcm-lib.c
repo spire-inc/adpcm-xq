@@ -11,7 +11,7 @@
 
 #include "adpcm-lib.h"
 
-/* This module encodes and decodes 4-bit ADPCM (DVI/IMA varient). */
+/* This module encodes and decodes 4-bit ADPCM (DVI/IMA variant). */
 
 /********************************* 4-bit ADPCM encoder ********************************/
 
@@ -45,15 +45,13 @@ static const int index_table[] = {
 
 void adpcm_init_context (struct adpcm_context *pcnxt, int lookahead, int32_t initial_delta)
 {
-    int i;
-
     pcnxt->pcmdata = 0;
     pcnxt->index = 0;
     pcnxt->lookahead = lookahead;
 
     // given the supplied initial deltas, search for and store the closest index
 
-    for (i = 0; i <= 88; i++)
+    for (int i = 0; i <= 88; i++)
         if (i == 88 || initial_delta < ((int32_t) step_table [i] + step_table [i+1]) / 2) {
             pcnxt->index = i;
             break;
@@ -170,9 +168,7 @@ static uint8_t encode_sample (struct adpcm_context *pcnxt, const int16_t *sample
 
 void adpcm_encode (struct adpcm_context *pcnxt, uint8_t *outbuf, size_t *outbufsize, const int16_t *inbuf, int inbufcount)
 {
-    int i;
-
-    for (i = 0; i < inbufcount; i++) {
+    for (int i = 0; i < inbufcount; i++) {
         const int16_t *pcmbuf = &inbuf[i];
         const uint8_t nibble = encode_sample (pcnxt, pcmbuf, inbufcount - i);
 
@@ -219,9 +215,7 @@ static uint16_t decode_sample (struct adpcm_context *pcnxt, const uint8_t nibble
 
 void adpcm_decode (struct adpcm_context *pcnxt, int16_t *outbuf, size_t *outbufsize, const uint8_t *inbuf, int inbufcount)
 {
-    int i;
-
-    for (i = 0; i < inbufcount; i++) {
+    for (int i = 0; i < inbufcount; i++) {
         uint8_t nibble;
 
         if (i % 2 == 0) {
