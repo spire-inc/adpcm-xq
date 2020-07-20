@@ -49,13 +49,12 @@ static const int index_table[] = {
 
 struct adpcm_channel {
     int32_t pcmdata;                        // current PCM value
-    int32_t error, weight, history [2];     // for noise shaping
     int8_t index;                           // current index into step size table
 };
 
 struct adpcm_context {
     struct adpcm_channel channels [2];
-    int num_channels, lookahead, noise_shaping;
+    int num_channels, lookahead;
 };
 
 /* Create ADPCM encoder context with given number of channels.
@@ -66,13 +65,12 @@ struct adpcm_context {
  * for encoding independent frames).
  */
 
-void *adpcm_create_context (int num_channels, int lookahead, int noise_shaping, int32_t initial_deltas [2])
+void *adpcm_create_context (int num_channels, int lookahead, int32_t initial_deltas [2])
 {
     struct adpcm_context *pcnxt = malloc (sizeof (struct adpcm_context));
     int ch, i;
 
     memset (pcnxt, 0, sizeof (struct adpcm_context));
-    pcnxt->noise_shaping = noise_shaping;
     pcnxt->num_channels = num_channels;
     pcnxt->lookahead = lookahead;
 
@@ -196,31 +194,6 @@ static uint8_t encode_sample (struct adpcm_context *pcnxt, int ch, const int16_t
     int step = step_table[pchan->index];
     int trial_delta = (step >> 3);
 
-    if (pcnxt->noise_shaping == NOISE_SHAPING_DYNAMIC) {
-        int32_t sam = (3 * pchan->history [0] - pchan->history [1]) >> 1;
-        int32_t temp = csample - (((pchan->weight * sam) + 512) >> 10);
-        int32_t shaping_weight;
-
-        if (sam && temp) pchan->weight -= (((sam ^ temp) >> 29) & 4) - 2;
-        pchan->history [1] = pchan->history [0];
-        pchan->history [0] = csample;
-
-        shaping_weight = (pchan->weight < 256) ? 1024 : 1536 - (pchan->weight * 2);
-        temp = -((shaping_weight * pchan->error + 512) >> 10);
-
-        if (shaping_weight < 0 && temp) {
-            if (temp == pchan->error)
-                temp = (temp < 0) ? temp + 1 : temp - 1;
-
-            pchan->error = -csample;
-            csample += temp;
-        }
-        else
-            pchan->error = -(csample += temp);
-    }
-    else if (pcnxt->noise_shaping == NOISE_SHAPING_STATIC)
-        pchan->error = -(csample -= pchan->error);
-
     if (depth > pcnxt->lookahead)
         depth = pcnxt->lookahead;
 
@@ -235,9 +208,6 @@ static uint8_t encode_sample (struct adpcm_context *pcnxt, int ch, const int16_t
     pchan->index += index_table[nibble & 0x07];
     CLIP(pchan->index, 0, 88);
     CLIP(pchan->pcmdata, -32768, 32767);
-
-    if (pcnxt->noise_shaping)
-        pchan->error += pchan->pcmdata;
 
     return nibble;
 }
