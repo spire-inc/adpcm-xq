@@ -45,26 +45,18 @@ static const int index_table[] = {
     -1, -1, -1, -1, 2, 4, 6, 8
 };
 
-struct adpcm_context {
-    int32_t pcmdata;                        // current PCM value
-    int8_t index;                           // current index into step size table
-    int lookahead;
-};
-
-/* Create ADPCM encoder context.
- * The returned pointer is used for subsequent calls. Note that
- * even though an ADPCM encoder could be set up to encode frames
- * independently, we use a context so that we can use previous
- * data to improve quality (this encoder might not be optimal
- * for encoding independent frames).
+/* Initialize ADPCM encoder context. Note that even though an ADPCM encoder
+ * could be set up to encode frames independently, we use a context so that
+ * we can use previous data to improve quality (this encoder might not be
+ * optimal for encoding independent frames).
  */
 
-void *adpcm_create_context (int lookahead, int32_t initial_delta)
+void adpcm_init_context (struct adpcm_context *pcnxt, int lookahead, int32_t initial_delta)
 {
-    struct adpcm_context *pcnxt = malloc (sizeof (struct adpcm_context));
     int i;
 
-    memset (pcnxt, 0, sizeof (struct adpcm_context));
+    pcnxt->pcmdata = 0;
+    pcnxt->index = 0;
     pcnxt->lookahead = lookahead;
 
     // given the supplied initial deltas, search for and store the closest index
@@ -74,18 +66,6 @@ void *adpcm_create_context (int lookahead, int32_t initial_delta)
             pcnxt->index = i;
             break;
         }
-
-    return pcnxt;
-}
-
-/* Free the ADPCM encoder context.
- */
-
-void adpcm_free_context (void *p)
-{
-    struct adpcm_context *pcnxt = (struct adpcm_context *) p;
-
-    free (pcnxt);
 }
 
 static void set_decode_parameters (struct adpcm_context *pcnxt, int32_t *init_pcmdata, int8_t *init_index)
@@ -224,7 +204,7 @@ static void encode_chunks (struct adpcm_context *pcnxt, uint8_t **outbuf, size_t
 /* Encode a block of 16-bit PCM data into 4-bit ADPCM.
  *
  * Parameters:
- *  p               the context returned by adpcm_begin()
+ *  pcnxt           the context initialized by adpcm_init_context()
  *  outbuf          destination buffer
  *  outbufsize      pointer to variable where the number of bytes written
  *                   will be stored
@@ -235,9 +215,8 @@ static void encode_chunks (struct adpcm_context *pcnxt, uint8_t **outbuf, size_t
  * Returns 1 (for success as there is no error checking)
  */
 
-int adpcm_encode_block (void *p, uint8_t *outbuf, size_t *outbufsize, const int16_t *inbuf, int inbufcount)
+int adpcm_encode_block (struct adpcm_context *pcnxt, uint8_t *outbuf, size_t *outbufsize, const int16_t *inbuf, int inbufcount)
 {
-    struct adpcm_context *pcnxt = (struct adpcm_context *) p;
     int32_t init_pcmdata;
     int8_t init_index;
 
