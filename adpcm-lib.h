@@ -17,7 +17,7 @@ struct adpcm_context {
     int lookahead;
 };
 
-void adpcm_init_context (struct adpcm_context *pcnxt, int lookahead, int32_t initial_delta);
+void adpcm_init_context (struct adpcm_context *pcnxt, int16_t pcm, int lookahead, int32_t initial_delta);
 void adpcm_encode (struct adpcm_context *pcnxt, uint8_t *outbuf, size_t *outbufsize, const int16_t *inbuf, int inbufcount);
 void adpcm_decode (struct adpcm_context *pcnxt, int16_t *outbuf, size_t *outbufsize, const uint8_t *inbuf, int inbufcount);
 

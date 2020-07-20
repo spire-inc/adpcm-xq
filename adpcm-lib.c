@@ -43,9 +43,9 @@ static const int index_table[] = {
 
 /* Initialize ADPCM encoder context. */
 
-void adpcm_init_context (struct adpcm_context *pcnxt, int lookahead, int32_t initial_delta)
+void adpcm_init_context (struct adpcm_context *pcnxt, int16_t pcm, int lookahead, int32_t initial_delta)
 {
-    pcnxt->pcmdata = 0;
+    pcnxt->pcmdata = pcm;
     pcnxt->index = 0;
     pcnxt->lookahead = lookahead;
 
