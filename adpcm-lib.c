@@ -68,18 +68,6 @@ void adpcm_init_context (struct adpcm_context *pcnxt, int lookahead, int32_t ini
         }
 }
 
-static void set_decode_parameters (struct adpcm_context *pcnxt, int32_t *init_pcmdata, int8_t *init_index)
-{
-    pcnxt->pcmdata = *init_pcmdata;
-    pcnxt->index = *init_index;
-}
-
-static void get_decode_parameters (struct adpcm_context *pcnxt, int32_t *init_pcmdata, int8_t *init_index)
-{
-    *init_pcmdata = pcnxt->pcmdata;
-    *init_index = pcnxt->index;
-}
-
 static double minimum_error (struct adpcm_context *pcnxt, int32_t csample, const int16_t *sample, int depth, int *best_nibble)
 {
     int32_t delta = csample - pcnxt->pcmdata;
@@ -217,26 +205,20 @@ static void encode_chunks (struct adpcm_context *pcnxt, uint8_t **outbuf, size_t
 
 int adpcm_encode_block (struct adpcm_context *pcnxt, uint8_t *outbuf, size_t *outbufsize, const int16_t *inbuf, int inbufcount)
 {
-    int32_t init_pcmdata;
-    int8_t init_index;
-
     *outbufsize = 0;
 
     if (!inbufcount)
         return 1;
 
-    get_decode_parameters(pcnxt, &init_pcmdata, &init_index);
-
     init_pcmdata = *inbuf++;
-    outbuf[0] = init_pcmdata;
-    outbuf[1] = init_pcmdata >> 8;
-    outbuf[2] = init_index;
+    outbuf[0] = pcnxt->pcmdata;
+    outbuf[1] = pcnxt->pcmdata >> 8;
+    outbuf[2] = pcnxt->index;
     outbuf[3] = 0;
 
     outbuf += 4;
     *outbufsize += 4;
 
-    set_decode_parameters(pcnxt, &init_pcmdata, &init_index);
     encode_chunks (pcnxt, &outbuf, outbufsize, &inbuf, inbufcount);
 
     return 1;
