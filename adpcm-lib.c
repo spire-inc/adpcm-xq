@@ -13,13 +13,11 @@
 
 /* This module encodes and decodes 4-bit ADPCM (DVI/IMA variant). */
 
-/********************************* 4-bit ADPCM encoder ********************************/
-
 #define CLIP(data, min, max) \
 if ((data) > (max)) data = max; \
 else if ((data) < (min)) data = min;
 
-/* step table */
+/* Step table */
 static const uint16_t step_table[89] = {
     7, 8, 9, 10, 11, 12, 13, 14,
     16, 17, 19, 21, 23, 25, 28, 31,
@@ -35,7 +33,7 @@ static const uint16_t step_table[89] = {
     32767
 };
 
-/* step index tables */
+/* Step index tables */
 static const int index_table[] = {
     /* adpcm data size is 4 */
     -1, -1, -1, -1, 2, 4, 6, 8
@@ -43,7 +41,7 @@ static const int index_table[] = {
 
 /* Initialize ADPCM encoder context. */
 
-void adpcm_init_context (struct adpcm_context *pcnxt, int16_t pcm, int lookahead, int32_t initial_delta)
+void adpcm_init_context (adpcm_context_t *pcnxt, int16_t pcm, int lookahead, int32_t initial_delta)
 {
     pcnxt->pcmdata = pcm;
     pcnxt->index = 0;
@@ -58,7 +56,7 @@ void adpcm_init_context (struct adpcm_context *pcnxt, int16_t pcm, int lookahead
         }
 }
 
-static double minimum_error (struct adpcm_context *pcnxt, int32_t csample, const int16_t *sample, int depth, int *best_nibble)
+static double minimum_error (adpcm_context_t *pcnxt, int32_t csample, const int16_t *sample, int depth, int *best_nibble)
 {
     int32_t delta = csample - pcnxt->pcmdata;
     int32_t pcmdata = pcnxt->pcmdata;
@@ -130,7 +128,7 @@ static double minimum_error (struct adpcm_context *pcnxt, int32_t csample, const
     return min_error;
 }
 
-static uint8_t encode_sample (struct adpcm_context *pcnxt, const int16_t *sample, int num_samples)
+static uint8_t encode_sample (adpcm_context_t *pcnxt, const int16_t *sample, int num_samples)
 {
     int32_t csample = *sample;
     int depth = num_samples - 1, nibble;
@@ -155,37 +153,7 @@ static uint8_t encode_sample (struct adpcm_context *pcnxt, const int16_t *sample
     return nibble;
 }
 
-/* Encode 16-bit PCM data into 4-bit ADPCM.
- *
- * Parameters:
- *  pcnxt           the context initialized by adpcm_init_context()
- *  outbuf          destination ADPCM buffer
- *  outbufsize      pointer to variable where the number of bytes written
- *                   will be stored
- *  inbuf           source PCM samples
- *  inbufcount      number of PCM samples provided
- */
-
-void adpcm_encode (struct adpcm_context *pcnxt, uint8_t *outbuf, size_t *outbufsize, const int16_t *inbuf, int inbufcount)
-{
-    for (int i = 0; i < inbufcount; i++) {
-        const int16_t *pcmbuf = &inbuf[i];
-        const uint8_t nibble = encode_sample (pcnxt, pcmbuf, inbufcount - i);
-
-        if (i % 2 == 0) {
-            outbuf[i / 2] = nibble;
-        }
-        else {
-            outbuf[i / 2] |= nibble << 4;
-        }
-    }
-
-    *outbufsize = (inbufcount + 1) / 2;
-}
-
-/********************************* 4-bit ADPCM decoder ********************************/
-
-static uint16_t decode_sample (struct adpcm_context *pcnxt, const uint8_t nibble)
+static uint16_t decode_sample (adpcm_context_t *pcnxt, const uint8_t nibble)
 {
     int step = step_table [pcnxt->index], delta = step >> 3;
 
@@ -202,6 +170,34 @@ static uint16_t decode_sample (struct adpcm_context *pcnxt, const uint8_t nibble
     return pcnxt->pcmdata;
 }
 
+/* Encode 16-bit PCM data into 4-bit ADPCM.
+ *
+ * Parameters:
+ *  pcnxt           the context initialized by adpcm_init_context()
+ *  outbuf          destination ADPCM buffer
+ *  outbufsize      pointer to variable where the number of bytes written
+ *                   will be stored
+ *  inbuf           source PCM samples
+ *  inbufcount      number of PCM samples provided
+ */
+
+void adpcm_encode (adpcm_context_t *pcnxt, uint8_t *outbuf, size_t *outbufsize, const int16_t *inbuf, int inbufcount)
+{
+    for (int i = 0; i < inbufcount; i++) {
+        const int16_t *pcmbuf = &inbuf[i];
+        const uint8_t nibble = encode_sample (pcnxt, pcmbuf, inbufcount - i);
+
+        if (i % 2 == 0) {
+            outbuf[i / 2] = nibble;
+        }
+        else {
+            outbuf[i / 2] |= nibble << 4;
+        }
+    }
+
+    *outbufsize = (inbufcount + 1) / 2;
+}
+
 /* Decode 4-bit ADPCM data into 16-bit PCM.
  *
  * Parameters:
@@ -213,7 +209,7 @@ static uint16_t decode_sample (struct adpcm_context *pcnxt, const uint8_t nibble
  *  inbufcount      number of ADPCM samples provided
  */ 
 
-void adpcm_decode (struct adpcm_context *pcnxt, int16_t *outbuf, size_t *outbufsize, const uint8_t *inbuf, int inbufcount)
+void adpcm_decode (adpcm_context_t *pcnxt, int16_t *outbuf, size_t *outbufsize, const uint8_t *inbuf, int inbufcount)
 {
     for (int i = 0; i < inbufcount; i++) {
         uint8_t nibble;
