@@ -11,9 +11,9 @@
 
 #include <stdint.h>
 
-void *adpcm_create_context (int num_channels, int lookahead, int32_t initial_deltas [2]);
+void *adpcm_create_context (int lookahead, int32_t initial_delta);
 int adpcm_encode_block (void *p, uint8_t *outbuf, size_t *outbufsize, const int16_t *inbuf, int inbufcount);
-int adpcm_decode_block (int16_t *outbuf, const uint8_t *inbuf, size_t inbufsize, int channels);
+int adpcm_decode_block (int16_t *outbuf, const uint8_t *inbuf, size_t inbufsize);
 void adpcm_free_context (void *p);
 
 #endif /* ADPCMLIB_H_ */

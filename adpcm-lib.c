@@ -14,9 +14,7 @@
 /* This module encodes and decodes 4-bit ADPCM (DVI/IMA varient). ADPCM data is divided
  * into independently decodable blocks that can be relatively small. The most common
  * configuration is to store 505 samples into a 256 byte block, although other sizes are
- * permitted as long as the number of samples is one greater than a multiple of 8. When
- * multiple channels are present, they are interleaved in the data with an 8-sample
- * interval. 
+ * permitted as long as the number of samples is one greater than a multiple of 8.
  */
 
 /********************************* 4-bit ADPCM encoder ********************************/
@@ -47,17 +45,13 @@ static const int index_table[] = {
     -1, -1, -1, -1, 2, 4, 6, 8
 };
 
-struct adpcm_channel {
+struct adpcm_context {
     int32_t pcmdata;                        // current PCM value
     int8_t index;                           // current index into step size table
+    int lookahead;
 };
 
-struct adpcm_context {
-    struct adpcm_channel channels [2];
-    int num_channels, lookahead;
-};
-
-/* Create ADPCM encoder context with given number of channels.
+/* Create ADPCM encoder context.
  * The returned pointer is used for subsequent calls. Note that
  * even though an ADPCM encoder could be set up to encode frames
  * independently, we use a context so that we can use previous
@@ -65,23 +59,21 @@ struct adpcm_context {
  * for encoding independent frames).
  */
 
-void *adpcm_create_context (int num_channels, int lookahead, int32_t initial_deltas [2])
+void *adpcm_create_context (int lookahead, int32_t initial_delta)
 {
     struct adpcm_context *pcnxt = malloc (sizeof (struct adpcm_context));
-    int ch, i;
+    int i;
 
     memset (pcnxt, 0, sizeof (struct adpcm_context));
-    pcnxt->num_channels = num_channels;
     pcnxt->lookahead = lookahead;
 
     // given the supplied initial deltas, search for and store the closest index
 
-    for (ch = 0; ch < num_channels; ++ch)
-        for (i = 0; i <= 88; i++)
-            if (i == 88 || initial_deltas [ch] < ((int32_t) step_table [i] + step_table [i+1]) / 2) {
-                pcnxt->channels [ch].index = i;
-                break;
-            }
+    for (i = 0; i <= 88; i++)
+        if (i == 88 || initial_delta < ((int32_t) step_table [i] + step_table [i+1]) / 2) {
+            pcnxt->index = i;
+            break;
+        }
 
     return pcnxt;
 }
@@ -98,29 +90,22 @@ void adpcm_free_context (void *p)
 
 static void set_decode_parameters (struct adpcm_context *pcnxt, int32_t *init_pcmdata, int8_t *init_index)
 {
-    int ch;
-
-    for (ch = 0; ch < pcnxt->num_channels; ch++) {
-        pcnxt->channels[ch].pcmdata = init_pcmdata[ch];
-        pcnxt->channels[ch].index = init_index[ch];
-    }
+    pcnxt->pcmdata = *init_pcmdata;
+    pcnxt->index = *init_index;
 }
 
 static void get_decode_parameters (struct adpcm_context *pcnxt, int32_t *init_pcmdata, int8_t *init_index)
 {
-    int ch;
-
-    for (ch = 0; ch < pcnxt->num_channels; ch++) {
-        init_pcmdata[ch] = pcnxt->channels[ch].pcmdata;
-        init_index[ch] = pcnxt->channels[ch].index;
-    }
+    *init_pcmdata = pcnxt->pcmdata;
+    *init_index = pcnxt->index;
 }
 
-static double minimum_error (const struct adpcm_channel *pchan, int nch, int32_t csample, const int16_t *sample, int depth, int *best_nibble)
+static double minimum_error (struct adpcm_context *pcnxt, int32_t csample, const int16_t *sample, int depth, int *best_nibble)
 {
-    int32_t delta = csample - pchan->pcmdata;
-    struct adpcm_channel chan = *pchan;
-    int step = step_table[chan.index];
+    int32_t delta = csample - pcnxt->pcmdata;
+    int32_t pcmdata = pcnxt->pcmdata;
+    int8_t index = pcnxt->index;
+    int step = step_table[pcnxt->index];
     int trial_delta = (step >> 3);
     int nibble, nibble2;
     double min_error;
@@ -139,15 +124,15 @@ static double minimum_error (const struct adpcm_channel *pchan, int nch, int32_t
     if (nibble & 4) trial_delta += step;
     if (nibble & 8) trial_delta = -trial_delta;
 
-    chan.pcmdata += trial_delta;
-    CLIP(chan.pcmdata, -32768, 32767);
+    pcmdata += trial_delta;
+    CLIP(pcmdata, -32768, 32767);
     if (best_nibble) *best_nibble = nibble;
-    min_error = (double) (chan.pcmdata - csample) * (chan.pcmdata - csample);
+    min_error = (double) (pcmdata - csample) * (pcmdata - csample);
 
     if (depth) {
-        chan.index += index_table[nibble & 0x07];
-        CLIP(chan.index, 0, 88);
-        min_error += minimum_error (&chan, nch, sample [nch], sample + nch, depth - 1, NULL);
+        index += index_table[nibble & 0x07];
+        CLIP(index, 0, 88);
+        min_error += minimum_error (pcnxt, sample [1], sample + 1, depth - 1, NULL);
     }
     else
         return min_error;
@@ -158,7 +143,8 @@ static double minimum_error (const struct adpcm_channel *pchan, int nch, int32_t
         if (nibble2 == nibble)
             continue;
 
-        chan = *pchan;
+        pcmdata = pcnxt->pcmdata;
+        index = pcnxt->index;
         trial_delta = (step >> 3);
 
         if (nibble2 & 1) trial_delta += (step >> 2);
@@ -166,15 +152,15 @@ static double minimum_error (const struct adpcm_channel *pchan, int nch, int32_t
         if (nibble2 & 4) trial_delta += step;
         if (nibble2 & 8) trial_delta = -trial_delta;
 
-        chan.pcmdata += trial_delta;
-        CLIP(chan.pcmdata, -32768, 32767);
+        pcmdata += trial_delta;
+        CLIP(pcmdata, -32768, 32767);
 
-        error = (double) (chan.pcmdata - csample) * (chan.pcmdata - csample);
+        error = (double) (pcmdata - csample) * (pcmdata - csample);
 
         if (error < min_error) {
-            chan.index += index_table[nibble2 & 0x07];
-            CLIP(chan.index, 0, 88);
-            error += minimum_error (&chan, nch, sample [nch], sample + nch, depth - 1, NULL);
+            index += index_table[nibble2 & 0x07];
+            CLIP(index, 0, 88);
+            error += minimum_error (pcnxt, sample [1], sample + 1, depth - 1, NULL);
 
             if (error < min_error) {
                 if (best_nibble) *best_nibble = nibble2;
@@ -186,28 +172,27 @@ static double minimum_error (const struct adpcm_channel *pchan, int nch, int32_t
     return min_error;
 }
 
-static uint8_t encode_sample (struct adpcm_context *pcnxt, int ch, const int16_t *sample, int num_samples)
+static uint8_t encode_sample (struct adpcm_context *pcnxt, const int16_t *sample, int num_samples)
 {
-    struct adpcm_channel *pchan = pcnxt->channels + ch;
     int32_t csample = *sample;
     int depth = num_samples - 1, nibble;
-    int step = step_table[pchan->index];
+    int step = step_table[pcnxt->index];
     int trial_delta = (step >> 3);
 
     if (depth > pcnxt->lookahead)
         depth = pcnxt->lookahead;
 
-    minimum_error (pchan, pcnxt->num_channels, csample, sample, depth, &nibble);
+    minimum_error (pcnxt, csample, sample, depth, &nibble);
 
     if (nibble & 1) trial_delta += (step >> 2);
     if (nibble & 2) trial_delta += (step >> 1);
     if (nibble & 4) trial_delta += step;
     if (nibble & 8) trial_delta = -trial_delta;
 
-    pchan->pcmdata += trial_delta;
-    pchan->index += index_table[nibble & 0x07];
-    CLIP(pchan->index, 0, 88);
-    CLIP(pchan->pcmdata, -32768, 32767);
+    pcnxt->pcmdata += trial_delta;
+    pcnxt->index += index_table[nibble & 0x07];
+    CLIP(pcnxt->index, 0, 88);
+    CLIP(pcnxt->pcmdata, -32768, 32767);
 
     return nibble;
 }
@@ -215,27 +200,24 @@ static uint8_t encode_sample (struct adpcm_context *pcnxt, int ch, const int16_t
 static void encode_chunks (struct adpcm_context *pcnxt, uint8_t **outbuf, size_t *outbufsize, const int16_t **inbuf, int inbufcount)
 {
     const int16_t *pcmbuf;
-    int chunks, ch, i;
+    int chunks, i;
 
     chunks = (inbufcount - 1) / 8;
-    *outbufsize += (chunks * 4) * pcnxt->num_channels;
+    *outbufsize += (chunks * 4);
 
     while (chunks--)
     {
-        for (ch = 0; ch < pcnxt->num_channels; ch++)
-        {
-            pcmbuf = *inbuf + ch;
+        pcmbuf = *inbuf;
 
-            for (i = 0; i < 4; i++) {
-                **outbuf = encode_sample (pcnxt, ch, pcmbuf, chunks * 8 + (3 - i) * 2 + 2);
-                pcmbuf += pcnxt->num_channels;
-                **outbuf |= encode_sample (pcnxt, ch, pcmbuf, chunks * 8 + (3 - i) * 2 + 1) << 4;
-                pcmbuf += pcnxt->num_channels;
-                (*outbuf)++;
-            }
+        for (i = 0; i < 4; i++) {
+            **outbuf = encode_sample (pcnxt, pcmbuf, chunks * 8 + (3 - i) * 2 + 2);
+            pcmbuf++;
+            **outbuf |= encode_sample (pcnxt, pcmbuf, chunks * 8 + (3 - i) * 2 + 1) << 4;
+            pcmbuf++;
+            (*outbuf)++;
         }
 
-        *inbuf += 8 * pcnxt->num_channels;
+        *inbuf += 8;
     }
 }
 
@@ -248,8 +230,7 @@ static void encode_chunks (struct adpcm_context *pcnxt, uint8_t **outbuf, size_t
  *                   will be stored
  *  inbuf           source PCM samples
  *  inbufcount      number of composite PCM samples provided (note: this is
- *                   the total number of 16-bit samples divided by the number
- *                   of channels)
+ *                   the total number of 16-bit samples)
  *
  * Returns 1 (for success as there is no error checking)
  */
@@ -257,29 +238,26 @@ static void encode_chunks (struct adpcm_context *pcnxt, uint8_t **outbuf, size_t
 int adpcm_encode_block (void *p, uint8_t *outbuf, size_t *outbufsize, const int16_t *inbuf, int inbufcount)
 {
     struct adpcm_context *pcnxt = (struct adpcm_context *) p;
-    int32_t init_pcmdata[2];
-    int8_t init_index[2];
-    int ch;
+    int32_t init_pcmdata;
+    int8_t init_index;
 
     *outbufsize = 0;
 
     if (!inbufcount)
         return 1;
 
-    get_decode_parameters(pcnxt, init_pcmdata, init_index);
+    get_decode_parameters(pcnxt, &init_pcmdata, &init_index);
 
-    for (ch = 0; ch < pcnxt->num_channels; ch++) {
-        init_pcmdata[ch] = *inbuf++;
-        outbuf[0] = init_pcmdata[ch];
-        outbuf[1] = init_pcmdata[ch] >> 8;
-        outbuf[2] = init_index[ch];
-        outbuf[3] = 0;
+    init_pcmdata = *inbuf++;
+    outbuf[0] = init_pcmdata;
+    outbuf[1] = init_pcmdata >> 8;
+    outbuf[2] = init_index;
+    outbuf[3] = 0;
 
-        outbuf += 4;
-        *outbufsize += 4;
-    }
+    outbuf += 4;
+    *outbufsize += 4;
 
-    set_decode_parameters(pcnxt, init_pcmdata, init_index);
+    set_decode_parameters(pcnxt, &init_pcmdata, &init_index);
     encode_chunks (pcnxt, &outbuf, outbufsize, &inbuf, inbufcount);
 
     return 1;
@@ -296,73 +274,65 @@ int adpcm_encode_block (void *p, uint8_t *outbuf, size_t *outbufsize, const int1
  *  outbuf          destination for interleaved PCM samples
  *  inbuf           source ADPCM block
  *  inbufsize       size of source ADPCM block
- *  channels        number of channels in block (must be determined from other context)
  *
- * Returns number of converted composite samples (total samples divided by number of channels)
+ * Returns number of converted composite samples
  */ 
 
-int adpcm_decode_block (int16_t *outbuf, const uint8_t *inbuf, size_t inbufsize, int channels)
+int adpcm_decode_block (int16_t *outbuf, const uint8_t *inbuf, size_t inbufsize)
 {
-    int ch, samples = 1, chunks;
-    int32_t pcmdata[2];
-    int8_t index[2];
+    int samples = 1, chunks;
+    int32_t pcmdata;
+    int8_t index;
 
-    if (inbufsize < channels * 4)
+    if (inbufsize < 4)
         return 0;
 
-    for (ch = 0; ch < channels; ch++) {
-        *outbuf++ = pcmdata[ch] = (int16_t) (inbuf [0] | (inbuf [1] << 8));
-        index[ch] = inbuf [2];
+    *outbuf++ = pcmdata = (int16_t) (inbuf [0] | (inbuf [1] << 8));
+    index = inbuf [2];
 
-        if (index [ch] < 0 || index [ch] > 88 || inbuf [3])     // sanitize the input a little...
-            return 0;
+    if (index < 0 || index > 88 || inbuf [3])     // sanitize the input a little...
+        return 0;
 
-        inbufsize -= 4;
-        inbuf += 4;
-    }
+    inbufsize -= 4;
+    inbuf += 4;
 
-    chunks = inbufsize / (channels * 4);
+    chunks = inbufsize / 4;
     samples += chunks * 8;
 
     while (chunks--) {
-        int ch, i;
+        int i;
 
-        for (ch = 0; ch < channels; ++ch) {
+        for (i = 0; i < 4; ++i) {
+            int step = step_table [index], delta = step >> 3;
 
-            for (i = 0; i < 4; ++i) {
-                int step = step_table [index [ch]], delta = step >> 3;
+            if (*inbuf & 1) delta += (step >> 2);
+            if (*inbuf & 2) delta += (step >> 1);
+            if (*inbuf & 4) delta += step;
+            if (*inbuf & 8) delta = -delta;
 
-                if (*inbuf & 1) delta += (step >> 2);
-                if (*inbuf & 2) delta += (step >> 1);
-                if (*inbuf & 4) delta += step;
-                if (*inbuf & 8) delta = -delta;
-                
-                pcmdata[ch] += delta;
-                index[ch] += index_table [*inbuf & 0x7];
-                CLIP(index[ch], 0, 88);
-                CLIP(pcmdata[ch], -32768, 32767);
-                outbuf [i * 2 * channels] = pcmdata[ch];
+            pcmdata += delta;
+            index += index_table [*inbuf & 0x7];
+            CLIP(index, 0, 88);
+            CLIP(pcmdata, -32768, 32767);
+            outbuf [i * 2] = pcmdata;
 
-                step = step_table [index [ch]], delta = step >> 3;
+            step = step_table [index], delta = step >> 3;
 
-                if (*inbuf & 0x10) delta += (step >> 2);
-                if (*inbuf & 0x20) delta += (step >> 1);
-                if (*inbuf & 0x40) delta += step;
-                if (*inbuf & 0x80) delta = -delta;
-                
-                pcmdata[ch] += delta;
-                index[ch] += index_table [(*inbuf >> 4) & 0x7];
-                CLIP(index[ch], 0, 88);
-                CLIP(pcmdata[ch], -32768, 32767);
-                outbuf [(i * 2 + 1) * channels] = pcmdata[ch];
+            if (*inbuf & 0x10) delta += (step >> 2);
+            if (*inbuf & 0x20) delta += (step >> 1);
+            if (*inbuf & 0x40) delta += step;
+            if (*inbuf & 0x80) delta = -delta;
 
-                inbuf++;
-            }
+            pcmdata += delta;
+            index += index_table [(*inbuf >> 4) & 0x7];
+            CLIP(index, 0, 88);
+            CLIP(pcmdata, -32768, 32767);
+            outbuf [(i * 2 + 1)] = pcmdata;
 
-            outbuf++;
+            inbuf++;
         }
 
-        outbuf += channels * 7;
+        outbuf += 8;
     }
 
     return samples;
