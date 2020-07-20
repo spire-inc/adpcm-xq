@@ -39,10 +39,14 @@ static const int index_table[] = {
     -1, -1, -1, -1, 2, 4, 6, 8
 };
 
-/* Initialize ADPCM encoder context. */
+/* Initialize ADPCM codec context. */
 
-void adpcm_init_context (adpcm_context_t *pcnxt, int16_t pcm, int lookahead, int32_t initial_delta)
+ADPCM_STATUS_T adpcm_init_context (adpcm_context_t *pcnxt, int16_t pcm, int lookahead, int32_t initial_delta)
 {
+    if (!pcnxt || initial_delta > 65535) {
+        return ADPCM_INVALID_PARAM;
+    }
+
     pcnxt->pcmdata = pcm;
     pcnxt->index = 0;
     pcnxt->lookahead = lookahead;
@@ -54,6 +58,8 @@ void adpcm_init_context (adpcm_context_t *pcnxt, int16_t pcm, int lookahead, int
             pcnxt->index = i;
             break;
         }
+
+    return ADPCM_SUCCESS;
 }
 
 static double minimum_error (adpcm_context_t *pcnxt, int32_t csample, const int16_t *sample, int depth, int *best_nibble)
@@ -181,8 +187,12 @@ static uint16_t decode_sample (adpcm_context_t *pcnxt, const uint8_t nibble)
  *  inbufcount      number of PCM samples provided
  */
 
-void adpcm_encode (adpcm_context_t *pcnxt, uint8_t *outbuf, size_t *outbufsize, const int16_t *inbuf, int inbufcount)
+ADPCM_STATUS_T adpcm_encode (adpcm_context_t *pcnxt, uint8_t *outbuf, size_t *outbufsize, const int16_t *inbuf, int inbufcount)
 {
+    if (!pcnxt || !outbuf || !outbufsize || !inbuf || inbufcount <= 0) {
+        return ADPCM_INVALID_PARAM;
+    }
+
     for (int i = 0; i < inbufcount; i++) {
         const int16_t *pcmbuf = &inbuf[i];
         const uint8_t nibble = encode_sample (pcnxt, pcmbuf, inbufcount - i);
@@ -196,6 +206,8 @@ void adpcm_encode (adpcm_context_t *pcnxt, uint8_t *outbuf, size_t *outbufsize, 
     }
 
     *outbufsize = (inbufcount + 1) / 2;
+
+    return ADPCM_SUCCESS;
 }
 
 /* Decode 4-bit ADPCM data into 16-bit PCM.
@@ -209,8 +221,12 @@ void adpcm_encode (adpcm_context_t *pcnxt, uint8_t *outbuf, size_t *outbufsize, 
  *  inbufcount      number of ADPCM samples provided
  */ 
 
-void adpcm_decode (adpcm_context_t *pcnxt, int16_t *outbuf, size_t *outbufsize, const uint8_t *inbuf, int inbufcount)
+ADPCM_STATUS_T adpcm_decode (adpcm_context_t *pcnxt, int16_t *outbuf, size_t *outbufsize, const uint8_t *inbuf, int inbufcount)
 {
+    if (!pcnxt || !outbuf || !outbufsize || !inbuf || inbufcount <= 0) {
+        return ADPCM_INVALID_PARAM;
+    }
+
     for (int i = 0; i < inbufcount; i++) {
         uint8_t nibble;
 
@@ -225,5 +241,7 @@ void adpcm_decode (adpcm_context_t *pcnxt, int16_t *outbuf, size_t *outbufsize, 
     }
 
     *outbufsize = inbufcount * 2;
+
+    return ADPCM_SUCCESS;
 }
 
