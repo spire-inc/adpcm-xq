@@ -39,29 +39,6 @@ static const int index_table[] = {
     -1, -1, -1, -1, 2, 4, 6, 8
 };
 
-/* Initialize ADPCM codec context. */
-
-ADPCM_STATUS_T adpcm_init_context (adpcm_context_t *pcnxt, int16_t pcm, int lookahead, int32_t initial_delta)
-{
-    if (!pcnxt || initial_delta > 65535) {
-        return ADPCM_INVALID_PARAM;
-    }
-
-    pcnxt->pcmdata = pcm;
-    pcnxt->index = 0;
-    pcnxt->lookahead = lookahead;
-
-    // given the supplied initial deltas, search for and store the closest index
-
-    for (int i = 0; i <= 88; i++)
-        if (i == 88 || initial_delta < ((int32_t) step_table [i] + step_table [i+1]) / 2) {
-            pcnxt->index = i;
-            break;
-        }
-
-    return ADPCM_SUCCESS;
-}
-
 static double minimum_error (adpcm_context_t *pcnxt, int32_t csample, const int16_t *sample, int depth, int *best_nibble)
 {
     int32_t delta = csample - pcnxt->pcmdata;
@@ -134,15 +111,15 @@ static double minimum_error (adpcm_context_t *pcnxt, int32_t csample, const int1
     return min_error;
 }
 
-static uint8_t encode_sample (adpcm_context_t *pcnxt, const int16_t *sample, int num_samples)
+static uint8_t encode_sample (adpcm_context_t *pcnxt, const int16_t *sample, int num_samples, int lookahead)
 {
     int32_t csample = *sample;
     int depth = num_samples - 1, nibble;
     int step = step_table[pcnxt->index];
     int trial_delta = (step >> 3);
 
-    if (depth > pcnxt->lookahead)
-        depth = pcnxt->lookahead;
+    if (depth > lookahead)
+        depth = lookahead;
 
     minimum_error (pcnxt, csample, sample, depth, &nibble);
 
@@ -176,6 +153,59 @@ static uint16_t decode_sample (adpcm_context_t *pcnxt, const uint8_t nibble)
     return pcnxt->pcmdata;
 }
 
+/* Initialize ADPCM codec context for encoding.
+ *
+ * Parameters:
+ *  pcnxt       context to initialize
+ *  pcm0        first sample used as reference
+ *  pcm1        second sample used to calculate initial index
+ */
+
+ADPCM_STATUS_T adpcm_encode_init (adpcm_context_t *pcnxt, int16_t pcm0, int16_t pcm1)
+{
+    if (!pcnxt) {
+        return ADPCM_INVALID_PARAM;
+    }
+
+    pcnxt->pcmdata = pcm0;
+    pcnxt->index = 0;
+
+    int32_t delta = pcm1 - pcm0;
+
+    if (delta < 0) {
+        delta = -delta;
+    }
+
+    for (int i = 0; i <= 88; i++) {
+        if (i == 88 || delta < ((int32_t) step_table [i] + step_table [i+1]) / 2) {
+            pcnxt->index = i;
+            break;
+        }
+    }
+
+    return ADPCM_SUCCESS;
+}
+
+/* Initialize ADPCM codec context for decoding.
+ *
+ * Parameters:
+ *  pcnxt       context to initialize
+ *  pcm         initial sample
+ *  index       initial index
+ */
+
+ADPCM_STATUS_T adpcm_decode_init (adpcm_context_t *pcnxt, int16_t pcm, int8_t index)
+{
+    if (!pcnxt || index < 0 || index > 88) {
+        return ADPCM_INVALID_PARAM;
+    }
+
+    pcnxt->pcmdata = pcm;
+    pcnxt->index = index;
+
+    return ADPCM_SUCCESS;
+}
+
 /* Encode 16-bit PCM data into 4-bit ADPCM.
  *
  * Parameters:
@@ -185,9 +215,10 @@ static uint16_t decode_sample (adpcm_context_t *pcnxt, const uint8_t nibble)
  *                   will be stored
  *  inbuf           source PCM samples
  *  inbufcount      number of PCM samples provided
+ *  lookahead       lookahead amount
  */
 
-ADPCM_STATUS_T adpcm_encode (adpcm_context_t *pcnxt, uint8_t *outbuf, size_t *outbufsize, const int16_t *inbuf, int inbufcount)
+ADPCM_STATUS_T adpcm_encode (adpcm_context_t *pcnxt, uint8_t *outbuf, size_t *outbufsize, const int16_t *inbuf, int inbufcount, int lookahead)
 {
     if (!pcnxt || !outbuf || !outbufsize || !inbuf || inbufcount <= 0) {
         return ADPCM_INVALID_PARAM;
@@ -195,7 +226,7 @@ ADPCM_STATUS_T adpcm_encode (adpcm_context_t *pcnxt, uint8_t *outbuf, size_t *ou
 
     for (int i = 0; i < inbufcount; i++) {
         const int16_t *pcmbuf = &inbuf[i];
-        const uint8_t nibble = encode_sample (pcnxt, pcmbuf, inbufcount - i);
+        const uint8_t nibble = encode_sample (pcnxt, pcmbuf, inbufcount - i, lookahead);
 
         if (i % 2 == 0) {
             outbuf[i / 2] = nibble;
