@@ -39,7 +39,7 @@ static const int index_table[] = {
     -1, -1, -1, -1, 2, 4, 6, 8
 };
 
-static double minimum_error (adpcm_context_t *pcnxt, int32_t csample, const int16_t *sample, int depth, int *best_nibble)
+static float minimum_error (adpcm_context_t *pcnxt, int32_t csample, const int16_t *sample, int depth, int *best_nibble)
 {
     int32_t delta = csample - pcnxt->pcmdata;
     int32_t pcmdata = pcnxt->pcmdata;
@@ -47,7 +47,7 @@ static double minimum_error (adpcm_context_t *pcnxt, int32_t csample, const int1
     int step = step_table[pcnxt->index];
     int trial_delta = (step >> 3);
     int nibble, nibble2;
-    double min_error;
+    float min_error;
 
     if (delta < 0) {
         int mag = (-delta << 2) / step;
@@ -66,7 +66,7 @@ static double minimum_error (adpcm_context_t *pcnxt, int32_t csample, const int1
     pcmdata += trial_delta;
     CLIP(pcmdata, -32768, 32767);
     if (best_nibble) *best_nibble = nibble;
-    min_error = (double) (pcmdata - csample) * (pcmdata - csample);
+    min_error = (float) (pcmdata - csample) * (pcmdata - csample);
 
     if (depth) {
         index += index_table[nibble & 0x07];
@@ -77,7 +77,7 @@ static double minimum_error (adpcm_context_t *pcnxt, int32_t csample, const int1
         return min_error;
 
     for (nibble2 = 0; nibble2 <= 0xF; ++nibble2) {
-        double error;
+        float error;
 
         if (nibble2 == nibble)
             continue;
@@ -94,7 +94,7 @@ static double minimum_error (adpcm_context_t *pcnxt, int32_t csample, const int1
         pcmdata += trial_delta;
         CLIP(pcmdata, -32768, 32767);
 
-        error = (double) (pcmdata - csample) * (pcmdata - csample);
+        error = (float) (pcmdata - csample) * (pcmdata - csample);
 
         if (error < min_error) {
             index += index_table[nibble2 & 0x07];
