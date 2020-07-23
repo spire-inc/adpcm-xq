@@ -156,28 +156,31 @@ static uint16_t decode_sample (adpcm_context_t *pcnxt, const uint8_t nibble)
 /* Initialize ADPCM codec context for encoding.
  *
  * Parameters:
- *  pcnxt       context to initialize
- *  pcm0        first sample used as reference
- *  pcm1        second sample used to calculate initial index
+ *  pcnxt           context to initialize
+ *  inbuf           source PCM samples for index calculation
+ *  inbufcount      number of PCM samples provided
  */
 
-ADPCM_STATUS_T adpcm_encode_init (adpcm_context_t *pcnxt, int16_t pcm0, int16_t pcm1)
+ADPCM_STATUS_T adpcm_encode_init (adpcm_context_t *pcnxt, const int16_t *inbuf, int inbufcount)
 {
     if (!pcnxt) {
         return ADPCM_INVALID_PARAM;
     }
 
-    pcnxt->pcmdata = pcm0;
+    pcnxt->pcmdata = inbuf[0];
     pcnxt->index = 0;
 
-    int32_t delta = pcm1 - pcm0;
+    int avg_delta = 0;
+    for (int i = inbufcount - 1; i > 0; i--) {
+        int delta = abs (inbuf[i] - inbuf[i - 1]);
 
-    if (delta < 0) {
-        delta = -delta;
+        avg_delta -= avg_delta / 8;
+        avg_delta += delta;
     }
+    avg_delta /= 8;
 
     for (int i = 0; i <= 88; i++) {
-        if (i == 88 || delta < ((int32_t) step_table [i] + step_table [i+1]) / 2) {
+        if (i == 88 || avg_delta < ((step_table [i] + step_table [i+1]) / 2)) {
             pcnxt->index = i;
             break;
         }
