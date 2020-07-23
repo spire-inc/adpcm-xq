@@ -146,7 +146,7 @@ static uint16_t decode_sample (adpcm_context_t *pcnxt, const uint8_t nibble)
     if (nibble & 8) delta = -delta;
 
     pcnxt->pcmdata += delta;
-    pcnxt->index += index_table [nibble & 0x7];
+    pcnxt->index += index_table [nibble & 0x07];
     CLIP(pcnxt->index, 0, 88);
     CLIP(pcnxt->pcmdata, -32768, 32767);
 
@@ -265,10 +265,10 @@ ADPCM_STATUS_T adpcm_decode (adpcm_context_t *pcnxt, int16_t *outbuf, size_t *ou
         uint8_t nibble;
 
         if (i % 2 == 0) {
-            nibble = inbuf[i / 2] & 0x7;
+            nibble = inbuf[i / 2] & 0xF;
         }
         else {
-            nibble = (inbuf[i / 2] >> 4) & 0x7;
+            nibble = (inbuf[i / 2] >> 4) & 0xF;
         }
 
         outbuf[i] = decode_sample (pcnxt, nibble);
