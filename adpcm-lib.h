@@ -23,7 +23,7 @@ typedef struct {
 
 ADPCM_STATUS_T adpcm_encode_init (adpcm_context_t *pcnxt, const int16_t *inbuf, int inbufcount);
 ADPCM_STATUS_T adpcm_decode_init (adpcm_context_t *pcnxt, int16_t pcm, int8_t index);
-ADPCM_STATUS_T adpcm_encode (adpcm_context_t *pcnxt, uint8_t *outbuf, size_t *outbufsize, const int16_t *inbuf, int inbufcount, int lookahead);
-ADPCM_STATUS_T adpcm_decode (adpcm_context_t *pcnxt, int16_t *outbuf, size_t *outbufsize, const uint8_t *inbuf, int inbufcount);
+ADPCM_STATUS_T adpcm_encode (adpcm_context_t *pcnxt, uint8_t *outbuf, const int16_t *inbuf, int inbufcount, int lookahead);
+ADPCM_STATUS_T adpcm_decode (adpcm_context_t *pcnxt, int16_t *outbuf, const uint8_t *inbuf, int inbufcount);
 
 #endif /* ADPCMLIB_H_ */

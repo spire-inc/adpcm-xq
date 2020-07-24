@@ -214,16 +214,14 @@ ADPCM_STATUS_T adpcm_decode_init (adpcm_context_t *pcnxt, int16_t pcm, int8_t in
  * Parameters:
  *  pcnxt           the context initialized by adpcm_init_context()
  *  outbuf          destination ADPCM buffer
- *  outbufsize      pointer to variable where the number of bytes written
- *                   will be stored
  *  inbuf           source PCM samples
  *  inbufcount      number of PCM samples provided
  *  lookahead       lookahead amount
  */
 
-ADPCM_STATUS_T adpcm_encode (adpcm_context_t *pcnxt, uint8_t *outbuf, size_t *outbufsize, const int16_t *inbuf, int inbufcount, int lookahead)
+ADPCM_STATUS_T adpcm_encode (adpcm_context_t *pcnxt, uint8_t *outbuf, const int16_t *inbuf, int inbufcount, int lookahead)
 {
-    if (!pcnxt || !outbuf || !outbufsize || !inbuf || inbufcount <= 0) {
+    if (!pcnxt || !outbuf || !inbuf || inbufcount <= 0) {
         return ADPCM_INVALID_PARAM;
     }
 
@@ -239,8 +237,6 @@ ADPCM_STATUS_T adpcm_encode (adpcm_context_t *pcnxt, uint8_t *outbuf, size_t *ou
         }
     }
 
-    *outbufsize = (inbufcount + 1) / 2;
-
     return ADPCM_SUCCESS;
 }
 
@@ -249,15 +245,13 @@ ADPCM_STATUS_T adpcm_encode (adpcm_context_t *pcnxt, uint8_t *outbuf, size_t *ou
  * Parameters:
  *  pcnxt           the context initialized by adpcm_init_context()
  *  outbuf          destination for PCM samples
- *  outbufsize      pointer to variable where the number of bytes written
- *                   will be stored
  *  inbuf           source ADPCM buffer
  *  inbufcount      number of ADPCM samples provided
  */ 
 
-ADPCM_STATUS_T adpcm_decode (adpcm_context_t *pcnxt, int16_t *outbuf, size_t *outbufsize, const uint8_t *inbuf, int inbufcount)
+ADPCM_STATUS_T adpcm_decode (adpcm_context_t *pcnxt, int16_t *outbuf, const uint8_t *inbuf, int inbufcount)
 {
-    if (!pcnxt || !outbuf || !outbufsize || !inbuf || inbufcount <= 0) {
+    if (!pcnxt || !outbuf || !inbuf || inbufcount <= 0) {
         return ADPCM_INVALID_PARAM;
     }
 
@@ -273,8 +267,6 @@ ADPCM_STATUS_T adpcm_decode (adpcm_context_t *pcnxt, int16_t *outbuf, size_t *ou
 
         outbuf[i] = decode_sample (pcnxt, nibble);
     }
-
-    *outbufsize = inbufcount * 2;
 
     return ADPCM_SUCCESS;
 }
