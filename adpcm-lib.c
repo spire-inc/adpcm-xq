@@ -39,14 +39,14 @@ static const int index_table[] = {
     -1, -1, -1, -1, 2, 4, 6, 8
 };
 
-static float minimum_error (adpcm_context_t *pcnxt, int32_t csample, const int16_t *sample, int depth, int *best_nibble)
+static uint32_t minimum_error (adpcm_context_t *pcnxt, int32_t csample, const int16_t *sample, int depth, int *best_nibble)
 {
     int32_t delta = csample - pcnxt->pcmdata;
     adpcm_context_t cnxt = *pcnxt;
     int step = step_table[pcnxt->index];
     int trial_delta = (step >> 3);
     int nibble, nibble2;
-    float min_error;
+    uint32_t min_error;
 
     if (delta < 0) {
         int mag = (-delta << 2) / step;
@@ -65,7 +65,7 @@ static float minimum_error (adpcm_context_t *pcnxt, int32_t csample, const int16
     cnxt.pcmdata += trial_delta;
     CLIP(cnxt.pcmdata, -32768, 32767);
     if (best_nibble) *best_nibble = nibble;
-    min_error = (float) (cnxt.pcmdata - csample) * (cnxt.pcmdata - csample);
+    min_error = abs(cnxt.pcmdata - csample);
 
     if (depth) {
         cnxt.index += index_table[nibble & 0x07];
@@ -76,7 +76,7 @@ static float minimum_error (adpcm_context_t *pcnxt, int32_t csample, const int16
         return min_error;
 
     for (nibble2 = 0; nibble2 <= 0xF; ++nibble2) {
-        float error;
+        uint32_t error;
 
         if (nibble2 == nibble)
             continue;
@@ -92,7 +92,7 @@ static float minimum_error (adpcm_context_t *pcnxt, int32_t csample, const int16
         cnxt.pcmdata += trial_delta;
         CLIP(cnxt.pcmdata, -32768, 32767);
 
-        error = (float) (cnxt.pcmdata - csample) * (cnxt.pcmdata - csample);
+        error = abs(cnxt.pcmdata - csample);
 
         if (error < min_error) {
             cnxt.index += index_table[nibble2 & 0x07];
@@ -109,7 +109,7 @@ static float minimum_error (adpcm_context_t *pcnxt, int32_t csample, const int16
     return min_error;
 }
 
-static uint8_t encode_sample (adpcm_context_t *pcnxt, const int16_t *sample, int num_samples, int lookahead)
+static uint8_t encode_sample (adpcm_context_t *pcnxt, const int16_t *sample, int num_samples, int lookahead, uint32_t *error)
 {
     int32_t csample = *sample;
     int depth = num_samples - 1, nibble;
@@ -119,7 +119,7 @@ static uint8_t encode_sample (adpcm_context_t *pcnxt, const int16_t *sample, int
     if (depth > lookahead)
         depth = lookahead;
 
-    minimum_error (pcnxt, csample, sample, depth, &nibble);
+    *error += minimum_error (pcnxt, csample, sample, depth, &nibble);
 
     if (nibble & 1) trial_delta += (step >> 2);
     if (nibble & 2) trial_delta += (step >> 1);
@@ -214,10 +214,11 @@ ADPCM_STATUS_T adpcm_decode_init (adpcm_context_t *pcnxt, int16_t pcm, int8_t in
  *  outbuf          destination ADPCM buffer
  *  inbuf           source PCM samples
  *  inbufcount      number of PCM samples provided
- *  lookahead       lookahead amount
+ *  lookahead       lookahead depth
+ *  error           accumulated error metric to update
  */
 
-ADPCM_STATUS_T adpcm_encode (adpcm_context_t *pcnxt, uint8_t *outbuf, const int16_t *inbuf, int inbufcount, int lookahead)
+ADPCM_STATUS_T adpcm_encode (adpcm_context_t *pcnxt, uint8_t *outbuf, const int16_t *inbuf, int inbufcount, int lookahead, uint32_t *error)
 {
     if (!pcnxt || !outbuf || !inbuf || inbufcount <= 0) {
         return ADPCM_INVALID_PARAM;
@@ -225,7 +226,7 @@ ADPCM_STATUS_T adpcm_encode (adpcm_context_t *pcnxt, uint8_t *outbuf, const int1
 
     for (int i = 0; i < inbufcount; i++) {
         const int16_t *pcmbuf = &inbuf[i];
-        const uint8_t nibble = encode_sample (pcnxt, pcmbuf, inbufcount - i, lookahead);
+        const uint8_t nibble = encode_sample (pcnxt, pcmbuf, inbufcount - i, lookahead, error);
 
         if (i % 2 == 0) {
             outbuf[i / 2] = nibble;
