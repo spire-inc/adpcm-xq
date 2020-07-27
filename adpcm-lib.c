@@ -39,14 +39,14 @@ static const int index_table[] = {
     -1, -1, -1, -1, 2, 4, 6, 8
 };
 
-static uint32_t minimum_error (adpcm_context_t *pcnxt, int32_t csample, const int16_t *sample, int depth, int *best_nibble)
+static uint32_t minimum_error (adpcm_context_t *pcnxt, int32_t csample, const int16_t *sample, int depth, int *best_nibble, uint32_t *min_error)
 {
     int32_t delta = csample - pcnxt->pcmdata;
     adpcm_context_t cnxt = *pcnxt;
     int step = step_table[pcnxt->index];
     int trial_delta = (step >> 3);
     int nibble, nibble2;
-    uint32_t min_error;
+    uint32_t min_total_error;
 
     if (delta < 0) {
         int mag = (-delta << 2) / step;
@@ -65,15 +65,16 @@ static uint32_t minimum_error (adpcm_context_t *pcnxt, int32_t csample, const in
     cnxt.pcmdata += trial_delta;
     CLIP(cnxt.pcmdata, -32768, 32767);
     if (best_nibble) *best_nibble = nibble;
-    min_error = abs(cnxt.pcmdata - csample);
+    min_total_error = abs(cnxt.pcmdata - csample);
+    if (min_error) *min_error = min_total_error;
 
     if (depth) {
         cnxt.index += index_table[nibble & 0x07];
         CLIP(cnxt.index, 0, 88);
-        min_error += minimum_error (&cnxt, sample [1], sample + 1, depth - 1, NULL);
+        min_total_error += minimum_error (&cnxt, sample [1], sample + 1, depth - 1, NULL, NULL);
     }
     else
-        return min_error;
+        return min_total_error;
 
     for (nibble2 = 0; nibble2 <= 0xF; ++nibble2) {
         uint32_t error;
@@ -94,19 +95,22 @@ static uint32_t minimum_error (adpcm_context_t *pcnxt, int32_t csample, const in
 
         error = abs(cnxt.pcmdata - csample);
 
-        if (error < min_error) {
+        if (error < min_total_error) {
+            uint32_t total_error;
+
             cnxt.index += index_table[nibble2 & 0x07];
             CLIP(cnxt.index, 0, 88);
-            error += minimum_error (&cnxt, sample [1], sample + 1, depth - 1, NULL);
+            total_error = error + minimum_error (&cnxt, sample [1], sample + 1, depth - 1, NULL, NULL);
 
-            if (error < min_error) {
+            if (total_error < min_total_error) {
                 if (best_nibble) *best_nibble = nibble2;
-                min_error = error;
+                min_total_error = total_error;
+                if (min_error) *min_error = error;
             }
         }
     }
 
-    return min_error;
+    return min_total_error;
 }
 
 static uint8_t encode_sample (adpcm_context_t *pcnxt, const int16_t *sample, int num_samples, int lookahead, uint32_t *error)
@@ -115,11 +119,13 @@ static uint8_t encode_sample (adpcm_context_t *pcnxt, const int16_t *sample, int
     int depth = num_samples - 1, nibble;
     int step = step_table[pcnxt->index];
     int trial_delta = (step >> 3);
+    uint32_t sample_error;
 
     if (depth > lookahead)
         depth = lookahead;
 
-    *error += minimum_error (pcnxt, csample, sample, depth, &nibble);
+    minimum_error (pcnxt, csample, sample, depth, &nibble, &sample_error);
+    *error += sample_error;
 
     if (nibble & 1) trial_delta += (step >> 2);
     if (nibble & 2) trial_delta += (step >> 1);
