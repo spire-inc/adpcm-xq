@@ -77,7 +77,7 @@ ADPCM_STATUS_T adpcm_encode(adpcm_context_t *ctx, uint8_t *outBuf,
  *
  * Parameters:
  *  ctx             the context initialized by adpcm_init_context()
- *  outbuf          destination for PCM samples
+ *  outbuf          destination for PCM samples (can be NULL)
  *  inBuf           source ADPCM buffer
  *  inBufCount      number of ADPCM samples provided
  */

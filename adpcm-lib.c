@@ -145,7 +145,7 @@ ADPCM_STATUS_T adpcm_encode(adpcm_context_t *ctx, uint8_t *outBuf,
 ADPCM_STATUS_T adpcm_decode(adpcm_context_t *ctx, int16_t *outBuf,
                             const uint8_t *inBuf, int inBufCount)
 {
-    if (!ctx || !outBuf || !inBuf || inBufCount <= 0)
+    if (!ctx || !inBuf || inBufCount <= 0)
     {
         return ADPCM_INVALID_PARAM;
     }
@@ -163,7 +163,12 @@ ADPCM_STATUS_T adpcm_decode(adpcm_context_t *ctx, int16_t *outBuf,
             nibble = (inBuf[i / 2] >> 4) & 0xF;
         }
 
-        outBuf[i] = decode_sample(ctx, nibble);
+        int16_t pcm = decode_sample(ctx, nibble);
+
+        if (outBuf)
+        {
+            outBuf[i] = pcm;
+        }
     }
 
     return ADPCM_SUCCESS;
